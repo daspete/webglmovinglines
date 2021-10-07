@@ -1,187 +1,67 @@
 <template>
-    <div class="drop bg-indigo-500" ref="dropcontainer">
+    <!-- <div class="drop bg-indigo-500" ref="dropcontainer">
         <canvas class="w-full h-full" ref="drop"></canvas>
+    </div> -->
+    <div class="drop" ref="dropcontainer">
+        <div class="drop__shadow"></div>
+        <div class="drop__image"></div>
+        <canvas class="drop__canvas" ref="dropcanvas"></canvas>
+        <div class="drop__imageoverlay"></div>
     </div>
 </template>
 
 <script>
-import * as THREE from 'three';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
-import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from '~/utils/UnrealBloomPass.js';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import * as THREE from 'three'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { SavePass } from 'three/examples/jsm/postprocessing/SavePass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'
+import { BlendShader } from 'three/examples/jsm/shaders/BlendShader.js'
 
 let scene = null
 let camera = null
 let renderer = null
-let dropModel = null
 let clock = null
-let sign = 1
-// let points = null
-let dropMesh = null
-let pointUV = new THREE.Vector2()
-let positions = null
-let uv = null
-let perlin = new ImprovedNoise()
-let originalPositions = []
+let dropContainer = null
+let dropCanvas = null
+let width = 0
+let height = 0
+let points = []
 let linePositions = null
 let lineColors = null
+let lineMesh = null
+let lineMaxDistance = 2.5
 
-let pointCoords = [
-    // top
-    { x: 0, y: 0, z: 0 }, 
-    // row 1
-    { x: -0.4, y: 0.55, z: 0 },
-    { x: 0.4, y: 0.55, z: 0 },
-    { x: -0.2, y: 0.45, z: 0.5 },
-    { x: 0.2, y: 0.45, z: 0.5 },
-    // // row 2
-    { x: -0.5, y: 1, z: 0 },
-    { x: 0.5, y: 1, z: 0 },
-    { x: -0.6, y: 1, z: 0.5 },
-    { x: 0.6, y: 1, z: 0.5 },
-    { x: 0, y: 1.2, z: 0.5 },
-    // // row 3
-    { x: -0.7, y: 1.5, z: 0 },
-    { x: 0.7, y: 1.5, z: 0 },
-    { x: -0.85, y: 1.5, z: 0.5 },
-    { x: 0.85, y: 1.5, z: 0.5 },
-    { x: 0, y: 1.7, z: 0.5 },
-    // // row 4
-    { x: -1, y: 2, z: 0 },
-    { x: 1, y: 2, z: 0 },
-    { x: -1.2, y: 2, z: 0.5 },
-    { x: 1.2, y: 2, z: 0.5 },
-    { x: -0.5, y: 2.2, z: 0.6 },
-    { x: 0.5, y: 2.2, z: 0.6 },
-    // // row 5
-    { x: -1.2, y: 2.5, z: 0 },
-    { x: 1.2, y: 2.5, z: 0 },
-    { x: -1.5, y: 2.5, z: 0.5 },
-    { x: 1.5, y: 2.5, z: 0.5 },
-    { x: -0.6, y: 2.7, z: 0.6 },
-    { x: 0.6, y: 2.7, z: 0.6 },
-    { x: 0, y: 2.7, z: 0.7 },
-    // // row 6
-    { x: -1.4, y: 3.2, z: 0 },
-    { x: 1.4, y: 3.2, z: 0 },
-    { x: -1.72, y: 3.2, z: 0.5 },
-    { x: 1.72, y: 3.2, z: 0.5 },
-    { x: -0.7, y: 3.1, z: 0.6 },
-    { x: 0.7, y: 3.1, z: 0.6 },
-    { x: 0, y: 3.1, z: 0.7 },
-    // // row 7
-    { x: -1.4, y: 3.4, z: 0 },
-    { x: 1.4, y: 3.4, z: 0 },
-    { x: -1.72, y: 3.4, z: 0.5 },
-    { x: 1.72, y: 3.4, z: 0.5 },
-    { x: -0.8, y: 3.6, z: 0.6 },
-    { x: 0.8, y: 3.6, z: 0.6 },
-    { x: 0, y: 3.6, z: 0.7 },
-    // // row 8
-    { x: -2, y: 3.8, z: 0 },
-    { x: 2, y: 3.8, z: 0 },
-    { x: -1.52, y: 3.8, z: 0.5 },
-    { x: 1.52, y: 3.8, z: 0.5 },
-    { x: -0.7, y: 3.9, z: 0.6 },
-    { x: 0.7, y: 3.9, z: 0.6 },
-    { x: 0, y: 3.9, z: 0.7 },
-    // // row 8
-    { x: -1.36, y: 4.4, z: 0 },
-    { x: 1.36, y: 4.4, z: 0 },
-    { x: -1.72, y: 4.4, z: 0.5 },
-    { x: 1.72, y: 4.4, z: 0.5 },
-    { x: -0.7, y: 4.4, z: 0.6 },
-    { x: 0.7, y: 4.4, z: 0.6 },
-    { x: 0, y: 4.4, z: 0.7 },
-    // // row 9
-    { x: -1.36, y: 4.9, z: 0 },
-    { x: 1.36, y: 4.9, z: 0 },
-    { x: -1.4, y: 4.9, z: 0.5 },
-    { x: 1.4, y: 4.9, z: 0.5 },
-    { x: -0.5, y: 4.9, z: 0.4 },
-    { x: 0.5, y: 4.9, z: 0.4 },
-    { x: 0, y: 5, z: 0.3 },
-    // // row 10
-    { x: -0.8, y: 5.5, z: 0 },
-    { x: 0.8, y: 5.5, z: 0 },
-    { x: -0, y: 5.5, z: 0.5 },
-    { x: 0, y: 5.5, z: 0.5 },
-    { x: -0.5, y: 5.5, z: 0.4 },
-    { x: 0.5, y: 5.5, z: 0.4 },
-    { x: 0, y: 5, z: 0.3 },
+let lineColor = new THREE.Color(0xff0000)
+let backgroundColor = new THREE.Color(0xffffff)
+let diffColor = lineColor.clone().sub(backgroundColor)
 
+let postprocessingComposer = null
+let renderPass = null
+let savePass = null
+let blendPass = null
+let outputPass = null
+const renderTargetParameters = {
+	minFilter: THREE.LinearFilter,
+	magFilter: THREE.LinearFilter,
+	stencilBuffer: false
+}
 
-    // // row 3
-    // { x: -1, y: 0.6, z: 0 },
-    // { x: 1, y: 0.6, z: 0 },
-    // { x: -0.5, y: 0.6, z: 0.5 },
-    // { x: 0.5, y: 0.6, z: 0.5 },
-    // // row 4
-    // { x: -1, y: 0.8, z: 0 },
-    // { x: 1, y: 0.8, z: 0 },
-    // { x: -0.5, y: 0.8, z: 0.5 },
-    // { x: 0.5, y: 0.8, z: 0.5 },
-    // // row 5
-    // { x: -1, y: 1, z: 0 },
-    // { x: 1, y: 1, z: 0 },
-    // { x: -0.5, y: 1, z: 0.5 },
-    // { x: 0.5, y: 1, z: 0.5 },
-    // // row 6
-    // { x: -1, y: 1.2, z: 0 },
-    // { x: 1, y: 1.2, z: 0 },
-    // { x: -0.5, y: 1.2, z: 0.5 },
-    // { x: 0.5, y: 1.2, z: 0.5 },
-    // // row 7
-    // { x: -1, y: 1.4, z: 0 },
-    // { x: 1, y: 1.4, z: 0 },
-    // { x: -0.5, y: 1.4, z: 0.5 },
-    // { x: 0.5, y: 1.4, z: 0.5 },
-    // // row 8
-    // { x: -1, y: 1.6, z: 0 },
-    // { x: 1, y: 1.6, z: 0 },
-    // { x: -0.5, y: 1.6, z: 0.5 },
-    // { x: 0.5, y: 1.6, z: 0.5 },
-    // // row 9
-    // { x: -1, y: 1.8, z: 0 },
-    // { x: 1, y: 1.8, z: 0 },
-    // { x: -0.5, y: 1.8, z: 0.5 },
-    // { x: 0.5, y: 1.8, z: 0.5 },
-    // // row 10
-    // { x: -1, y: 2, z: 0 },
-    // { x: 1, y: 2, z: 0 },
-    // { x: -0.5, y: 2, z: 0.5 },
-    // { x: 0.5, y: 2, z: 0.5 },
-    // // row 11
-    // { x: -1, y: 2.2, z: 0 },
-    // { x: 1, y: 2.2, z: 0 },
-    // { x: -0.5, y: 2.2, z: 0.5 },
-    // { x: 0.5, y: 2.2, z: 0.5 },
+let pointDefinitions = [
+    { count: 1, y: 10, radius: 0 },
+    { count: 2, y: 9, radius: 0.8 },
+    { count: 3, y: 8, radius: 1.2 },
+    { count: 4, y: 7, radius: 2 },
+    { count: 8, y: 6, radius: 2.4 },
+    { count: 8, y: 5, radius: 3.1 },
+    { count: 7, y: 4, radius: 3.2 },
+    { count: 6, y: 3, radius: 3.4 },
+    { count: 8, y: 2, radius: 3.0 },
+    { count: 5, y: 1, radius: 2.2 },
+    { count: 1, y: -0.1, radius: 0 },
 ]
 
-
-
-let rows = 11
-
-let cols = 3
-
-let points = []
-let linesMesh = null
-let maxDistance = 1
-let diffColor = null
-let color = new THREE.Color(0xff5555)
-let backgroundColor = new THREE.Color(0x000000)
-// let renderScene = null
-// let bloomComposer = null
-// let bloomPass = null
-// let finalComposer = null
-// let finalPass = null
-
-// const ENTIRE_SCENE = 0, BLOOM_SCENE = 1;
-// const bloomLayer = new THREE.Layers();
-// bloomLayer.set( BLOOM_SCENE );
 
 export default {
     async mounted(){
@@ -194,81 +74,93 @@ export default {
         }
     },
 
+    mounted(){
+        this.StartEngine()
+        this.CreatePoints()
+        this.CreateNet()
+        this.Update()
+    },
+
     methods: {
-        GetBrightness(color){
-            return (0.299 * color.r) + (0.587 * color.g) + (0.114 * color.b)
+        StartEngine(){
+            dropContainer = this.$refs.dropcontainer
+            dropCanvas = this.$refs.dropcanvas
+
+            width = dropContainer.clientWidth
+            height = dropContainer.clientHeight
+
+            dropCanvas.width = width
+            dropCanvas.height = height
+
+            clock = new THREE.Clock()
+            scene = new THREE.Scene()
+            camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
+            camera.position.z = 12.6
+            camera.position.y = 5
+
+            renderer = new THREE.WebGLRenderer({
+                canvas: dropCanvas,
+                antialias: true,
+                alpha: true
+            })
+            renderer.setSize(width, height)
+
+            // Postprocessing pipeline
+            // postprocessingComposer = new EffectComposer(renderer)
+            
+            // renderPass = new RenderPass(scene, camera)
+            
+            // savePass = new SavePass(new THREE.WebGLRenderTarget(width, height, renderTargetParameters))
+            
+            // blendPass = new ShaderPass(BlendShader, 'tDiffuse1')
+            // blendPass.uniforms['tDiffuse2'].value = savePass.renderTarget.texture
+            // blendPass.uniforms['mixRatio'].value = 0.8
+
+            // outputPass = new ShaderPass(CopyShader)
+            // outputPass.renderToScreen = true
+
+            // postprocessingComposer.addPass(renderPass)
+            // postprocessingComposer.addPass(savePass)
+            // postprocessingComposer.addPass(blendPass)
+            // postprocessingComposer.addPass(outputPass)
         },
-        CreateNet(){
-            // for(let y = 0; y < rows; y++){
-            //     for(let x = 0; x < cols; x++){
-            //         let angle = (x / cols) * 360 + y * 15
-            //         let pointX = Math.cos(angle) * ((y) * 0.15)// * (y / rows) * 2
-            //         let pointY = Math.sin(angle)// * (y / rows) * 2
-            //         originalPositions.push(new THREE.Vector3(pointX, y== 0 ? 0 : -y * 0.2 + Math.random() * 0.2, pointY))
-            //     }
-            // }
-            
-            // for(let y = 0; y < rows; y++){
-            //     for(let x = 0; x < cols; x++){
-            //         let angle = (x / cols) * 360 - y * 15
-            //         let pointX = Math.cos(angle) * ((rows - y) * 0.1)// * (y / rows) * 2
-            //         let pointY = Math.sin(angle)// * (y / rows) * 2
-            //         originalPositions.push(new THREE.Vector3(pointX, (-rows * 0.2) -y * 0.2 + Math.random() * 0.2, pointY))
-            //     }
-            // }
 
-            // for(let x = 0; x < cols; x++){
-            //     let y = 8
-            //     let angle = (x / cols) * 360 - y * 15
-            //     let pointX = Math.cos(angle) * (15 * 0.1)// * (y / rows) * 2
-            //     let pointY = Math.sin(angle)// * (y / rows) * 2
-            //     originalPositions.push(new THREE.Vector3(pointX, (-rows * 0.2) -y * 0.2, pointY))
-            // }
 
-            // for(let x = 0; x < cols; x++){
-            //     let y = 9
-            //     let angle = (x / cols) * 360 - y * 15
-            //     let pointX = Math.cos(angle) * (12 * 0.1)// * (y / rows) * 2
-            //     let pointY = Math.sin(angle)// * (y / rows) * 2
-            //     originalPositions.push(new THREE.Vector3(pointX, (-rows * 0.2) -y * 0.2, pointY))
-            // }
+        CreatePoints(){
+            points = []
+            for (let i = 0; i < pointDefinitions.length; i++){
+                let pointDefinition = pointDefinitions[i]
+                let pointCount = pointDefinition.count
+                for (let j = 0; j < pointCount; j++){
+                    let angle = ((j + 1) / pointCount) * 360
 
-            // for(let x = 0; x < cols; x++){
-            //     let y = 8
-            //     let angle = (x / cols) * 360 - y * 15
-            //     let pointX = Math.cos(angle) * (10 * 0.1)// * (y / rows) * 2
-            //     let pointY = Math.sin(angle)// * (y / rows) * 2
-            //     originalPositions.push(new THREE.Vector3(pointX, (-rows * 0.2) -y * 0.2, pointY))
-            // }
+                    let x = Math.sin(angle * Math.PI / 180) * pointDefinition.radius
+                    let z = Math.cos(angle * Math.PI / 180) * pointDefinition.radius
 
-            // for(let x = 0; x < cols; x++){
-            //     let y = 6
-            //     let angle = (x / cols) * 360 - y * 15
-            //     let pointX = Math.cos(angle) * (15 * 0.1)// * (y / rows) * 2
-            //     let pointY = Math.sin(angle)// * (y / rows) * 2
-            //     originalPositions.push(new THREE.Vector3(pointX, (-rows * 0.2) -y * 0.2, pointY))
-            // }
+                    let point = new THREE.Vector3(x, pointDefinition.y, z)
+                    let pointMesh = this.CreatePointMesh(point)
 
-            // for(let x = 0; x < cols; x++){
-            //     let y = 4
-            //     let angle = (x / cols) * 360 - y * 15
-            //     let pointX = Math.cos(angle) * (15 * 0.1)// * (y / rows) * 2
-            //     let pointY = Math.sin(angle)// * (y / rows) * 2
-            //     originalPositions.push(new THREE.Vector3(pointX, (-rows * 0.2) -y * 0.2, pointY))
-            // }
+                    pointMesh.r = pointDefinition.radius
+                    pointMesh.originalY = pointDefinition.y
 
-            for(let i = 0; i < pointCoords.length; i++){
-                originalPositions.push(new THREE.Vector3(pointCoords[i].x, -pointCoords[i].y, pointCoords[i].z))
+                    points.push(pointMesh)
+                    scene.add(pointMesh)
+                }
             }
-            
+        },
 
-            linePositions = new Float32Array(originalPositions.length * originalPositions.length * 3)
-            lineColors = new Float32Array(originalPositions.length * originalPositions.length * 3)
+        CreatePointMesh(position){
+            const geometry = new THREE.SphereGeometry(0.05, 12, 12)
+            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 })
+            const sphere = new THREE.Mesh(geometry, material)
+            sphere.position.set(position.x, position.y, position.z)
+            return sphere
 
-            let colorB = this.GetBrightness(color)
-            let bgB = this.GetBrightness(backgroundColor)
+        },
 
-            diffColor = color.clone().sub(backgroundColor)
+        CreateNet(){
+            linePositions = new Float32Array(points.length * points.length * 3)
+            lineColors = new Float32Array(points.length * points.length * 3)
 
             let lineGeometry = new THREE.BufferGeometry()
             lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3).setUsage(THREE.DynamicDrawUsage))
@@ -280,13 +172,20 @@ export default {
                 vertexColors: THREE.VertexColors,
                 linewidth: 1,
                 blending: THREE.AdditiveBlending,
-                transparent: true,
-                side: THREE.DoubleSide,
+                transparent: true
             })
 
-            linesMesh = new THREE.LineSegments(lineGeometry, lineMaterial)
-            
+            lineMesh = new THREE.LineSegments(lineGeometry, lineMaterial)
+            scene.add(lineMesh)
+        },
 
+        Update(){
+            requestAnimationFrame(this.Update)
+
+            this.UpdateNet()
+            
+            // postprocessingComposer.render()
+            renderer.render(scene, camera)
         },
 
         UpdateNet(){
@@ -295,30 +194,26 @@ export default {
             let numConnected = 0
 
             for(let i = 0; i < points.length; i++){
-                let distance
                 let point = points[i]
-                
-                if(point.r != 0){
-                    let angle = Math.atan2(point.position.z, point.position.x)
-                    distance = Math.sqrt((point.position.z * point.position.z) + (point.position.x * point.position.x))
-                    angle += 0.00025 * point.r
-                    point.position.x = Math.cos(angle) * distance
-                    point.position.z = Math.sin(angle) * distance
-                }
+                if(point.r > 0) this.UpdatePoint(point, i)
 
                 for(let j = i; j < points.length; j++){
-                    if(i == j) continue
+                    // hacky one :D 
+                    if(j == i) continue
+
                     let otherPoint = points[j]
+
                     const dx = point.position.x - otherPoint.position.x
                     const dy = point.position.y - otherPoint.position.y
                     const dz = point.position.z - otherPoint.position.z
-                    distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
                     
-                    if(distance < maxDistance){
-                        let lineColor
-                        const alpha = this.Clamp(0, 1, ((1 - (distance / maxDistance)) *5))
-                        // console.log(alpha)
-                        lineColor = new THREE.Color(0x990000).lerp(diffColor, alpha)
+                    let distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+                    if(distance < lineMaxDistance){
+                        let distanceRatio = distance / lineMaxDistance
+                        let alpha = 1//point.position.z + 2//Math.max(0, 1 - distanceRatio)
+
+                        let lineColor = new THREE.Color(alpha,0,0)//(0xff0000)//.lerp(new THREE.Color(0x000000), alpha)
 
                         linePositions[ vertexPos++ ] = point.position.x
                         linePositions[ vertexPos++ ] = point.position.y
@@ -335,214 +230,63 @@ export default {
                         lineColors[ colorPos++ ] = lineColor.b
 
                         numConnected++
-                    }   
+                    }
                 }
             }
 
-            linesMesh.geometry.setDrawRange(0, numConnected * 2)
-            linesMesh.geometry.attributes.position.needsUpdate = true
-            linesMesh.geometry.attributes.color.needsUpdate = true
+            lineMesh.geometry.setDrawRange(0, numConnected * 2)
+            lineMesh.geometry.attributes.position.needsUpdate = true
+            lineMesh.geometry.attributes.color.needsUpdate = true
         },
 
-        Clamp(min, max, value){
-            if(value < min) return min
-            if(value > max) return max
-            return value
-        },
+        UpdatePoint(point, pointIndex){
+            let angle = Math.atan2(point.position.z, point.position.x)
+            let distance = Math.sqrt(point.position.z * point.position.z + point.position.x * point.position.x)
+            angle += 0.00025 * point.r * point.position.y * 0.5
+            point.position.x = Math.cos(angle) * distance
+            point.position.z = Math.sin(angle) * distance
+            point.position.y = point.originalY + Math.sin(clock.getElapsedTime() * Math.PI / 180 * 40) * 0.2 * (pointIndex % 2 == 0 ? 1 : -1)
 
-        async StartEngine(){
-            let container = this.$refs.dropcontainer
-            let canvas = this.$refs.drop
+            let alpha = 1//point.position.z + 2
 
-            canvas.width = container.clientWidth
-            canvas.height = container.clientHeight
+            point.material.color = new THREE.Color(alpha, 0, 0)
 
-            clock = new THREE.Clock()
-            scene = new THREE.Scene()
-            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000)
-            camera.position.z = 7
-            camera.position.y = -2.4
-
-            camera.position.x = 0.13
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, canvas: canvas })
-            renderer.setSize(container.clientWidth, container.clientHeight)
-
-            for(let i = 0; i < originalPositions.length; i++){
-                const geometry = new THREE.SphereGeometry( 0.3, 12, 12 )
-                const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 })
-                const sphere = new THREE.Mesh( geometry, material );
-                sphere.position.z = originalPositions[i].z
-                sphere.position.y = originalPositions[i].y
-                sphere.position.x = originalPositions[i].x
-                sphere.scale.set(0.1,0.1,0.1)
-                
-                if(sphere.position.y != 0) {
-                    sphere.r = -2 + Math.random() * 4
-                }else{
-                    sphere.r = 0
-                }
-
-                points.push(sphere)
-                scene.add( sphere );
-            }
-
-            scene.add(linesMesh)
-
-            // renderer.toneMapping = THREE.ReinhardToneMapping;
-            // renderer.toneMappingExposure = Math.pow( 1.5, 4.0 )
-
-            // renderScene = new RenderPass(scene, camera)
-            // bloomPass = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight),0.5,2,0.2)
-
-            // bloomPass.threshold = 0.1
-            // bloomPass.strength = 3
-            // bloomPass.radius = 0.1
-            // bloomComposer = new EffectComposer(renderer)
-            // bloomComposer.addPass(renderScene)
-            // bloomComposer.addPass(bloomPass)
-
-            // finalPass = new ShaderPass(
-			// 	new THREE.ShaderMaterial( {
-			// 		uniforms: {
-			// 			baseTexture: { value: null },
-			// 			bloomTexture: { value: bloomComposer.renderTarget2.texture }
-			// 		},
-			// 		vertexShader: `
-            //             varying vec2 vUv;
-            //             void main() {
-            //                 vUv = uv;
-            //                 gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-            //             }
-            //         `,
-			// 		fragmentShader: `
-            //             uniform sampler2D baseTexture;
-            //             uniform sampler2D bloomTexture;
-
-            //             varying vec2 vUv;
-
-                        
-
-            //             void main() {
-            //                 gl_FragColor = ( texture2D( baseTexture, vUv ) + vec4( 1.0 ) * texture2D( bloomTexture, vUv ) );
-            //             }
-            //         `,
-			// 		defines: {}
-			// 	} ), "baseTexture"
-			// );
-			// // finalPass.needsSwap = true;
-
-            // finalComposer = new EffectComposer(renderer)
-            // finalComposer.addPass(renderScene)
-            // finalComposer.addPass(finalPass)
-
-            // bloomComposer.renderToScreen = true
-
-
-
-
-
-
-            const light = new THREE.PointLight( 0xffffff, 1, 100 );
-            light.position.set( 0, 0, 5 );
-            scene.add( light );
-
-            // dropModel.scale.set(0.01, 0.01, 0.01)
-            
-            // scene.add(dropModel)
-            
-
-            // console.log(dropModel.vertices)
-
-            // const geometry = new THREE.BoxGeometry();
-            // const material = new THREE.MeshBasicMaterial( { color: 0x000000 } );
-            // const cube = new THREE.Mesh( geometry, material );
-            // cube.position.z = -1
-            // cube.position.y = 0.2
-            // cube.position.x = 0.12
-            // cube.scale.set(3,7,2)
-            // cube.layers.set(BLOOM_SCENE)
-            // scene.add( cube );
-            // console.log(dropMesh)
-
-            // positions = dropMesh.geometry.attributes.position
-            // for(let i = 0; i < positions.count; i++){
-            //     originalPositions.push(positions.getY(i))
-            // }
-            
-            // uv = dropMesh.geometry.attributes.uv
-
-            this.Update()
-        },
-
-        Update(){
-            requestAnimationFrame(this.Update)
-            // dropModel.rotation.y += 0.003
-
-            // let t = clock.getElapsedTime()
-
-            this.UpdateNet()
-
-            // for (let i = 0; i < positions.count; i++){
-            //     pointUV.fromBufferAttribute(uv, i).multiplyScalar(2500)
-            //     let y = perlin.noise(pointUV.x, pointUV.y + t, t * 0.01)
-            //     // console.log(y)
-            //     positions.setY(i, originalPositions[i] + y * 5)
-            // }
-            // positions.needsUpdate = true
-
-            // camera.layers.set( BLOOM_SCENE );
-            // bloomComposer.render();
-            // camera.layers.set( ENTIRE_SCENE );
-
-            renderer.render(scene, camera)
-        },
-
-        async LoadDropModel(){
-            dropModel = await this.LoadModel('/assets/models/dropinner.obj')
-            dropModel.traverse(child => {
-                if (child instanceof THREE.Mesh) {
-                    child.layers.set( BLOOM_SCENE );
-                    child.material = new THREE.MeshBasicMaterial( { color: 0xff0202, wireframe: false } );
-                    // points = new THREE.Points(child.geometry, new THREE.PointsMaterial({ size: 0.01, color: 0xffffff }))
-                    // console.log(points.morphTargetInfluences)
-                    // points.morphTargetInfluences = child.morphTargetInfluences
-                    // points.morphTargetDictionary = child.morphTargetDictionary
-                    // child.add(points)
-                    // console.log(child.morphTargetInfluences)
-                    dropMesh = child
-
-                    // child.material =new THREE.MeshPhongMaterial({
-                    //     color: 0xff0000,
-                    //     // flatShading: true,
-                    //     shininess: 2,
-                    //     specular: 0xffffff,
-                    //     // side: THREE.DoubleSide
-                    // })
-                //     child.castShadow = true
-                //     child.receiveShadow = true
-                }
-            })
-        },
-
-        async LoadModel(path){
-            return new Promise((resolve, reject) => {
-                let loader = new OBJLoader()
-                loader.load(
-                    path,
-                    (object) => { resolve(object) },
-                    (xhr) => { console.log(Math.round(xhr.loaded / xhr.total * 100) + '% of Drop model loaded') },
-                    (error) => { reject(error) }
-                )
-            })
         }
+
     }
 }
 </script>
 
 <style lang="scss">
 .drop {
-    width: 639px;
-    height: 599px;
+    width: 732px;
+    height: 823px;
+    @apply relative;
+    @apply bg-indigo-600;
     
+    &__image {
+        background-image: url(/assets/drop.png);
+        @apply absolute top-0 left-0 w-full h-full;
+        @apply bg-center bg-no-repeat;
+    }
+
+    &__shadow {
+        background-image: url(/assets/shadow.png);
+        @apply absolute top-0 left-0 w-full h-full;
+        @apply bg-center bg-no-repeat;
+    }
+
+    &__canvas {
+        @apply absolute top-0 left-0 w-full h-full;
+        mix-blend-mode: screen;
+        opacity: 0.5;
+    }
+
+    &__imageoverlay {
+        // background-image: url(/assets/drop.png);
+        // @apply absolute top-0 left-0 w-full h-full;
+        // @apply bg-center bg-no-repeat;
+        // mix-blend-mode: overlay ;
+    }
 }
 </style>
