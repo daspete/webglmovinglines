@@ -5,9 +5,9 @@ export default {
         '@nuxtjs/tailwindcss'
     ],
 
-    // plugins: [
-    //     '~/plugins/three'
-    // ],
+    plugins: [
+        '~/plugins/drop'
+    ],
 
     build: {
         transpile: [/^three/]
