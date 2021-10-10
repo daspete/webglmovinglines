@@ -7,10 +7,12 @@ const drop = new Drop({
     particleColor: 0xff0000,
     pointSize: 0.05,
     lineMaxDistance: 3.7,//2.5,
-    particleSize: 0.2,
+    particleSize: 0.14,
     particleTexture: '/assets/particle.png',
     particleRotationSpeed: 0.016,
     particleRadiusExpansion: 0.9,
+    particleSpeedVariance: 0.3,
+    particleSpeedFactor: 10,
     pointDefinitions: [
         { count: 1, y: 10, radius: 0 },
         { count: 2, y: 9, radius: 0.8 },

@@ -34,6 +34,9 @@ export default class Drop {
         this.particleTexture = options.particleTexture
         this.particleRotationSpeed = options.particleRotationSpeed
         this.particleRadiusExpansion = options.particleRadiusExpansion
+        this.particleSpeedVariance = options.particleSpeedVariance
+        this.particleSpeedFactor = options.particleSpeedFactor
+        this.particleColor = new Color(options.particleColor)
         this.lineColor = new Color(options.lineColor)
         this.lineMaxDistance = options.lineMaxDistance
         this.linePositions = null
@@ -140,7 +143,7 @@ export default class Drop {
     CreateParticles(){
         this.particles = new BufferGeometry()
         let particleMaterial = new ParticleBasicMaterial({
-            color: 0xff9999,
+            color: this.particleColor,
             size: this.particleSize,
             map: ImageUtils.loadTexture(this.particleTexture),
             blending: AdditiveBlending,
@@ -304,13 +307,13 @@ export default class Drop {
             let x = this.particles.attributes.position.array[i]
             let y = this.particles.attributes.position.array[i + 1]
 
-            let speedRange = 0.2
+            let speedRange = 0.3
 
-            let randomXSpeed = originalPosition.speedX || (Math.random() * speedRange + speedRange)
-            let randomYSpeed = originalPosition.speedY || (Math.random() * speedRange + speedRange)
+            let randomXSpeed = originalPosition.speedX || (Math.random() * this.particleSpeedVariance + this.particleSpeedVariance)
+            let randomYSpeed = originalPosition.speedY || (Math.random() * this.particleSpeedVariance + this.particleSpeedVariance)
 
-            let randomXRange = originalPosition.rangeX || (Math.random() * 40 + 20)
-            let randomYRange = originalPosition.rangeY || (Math.random() * 40 + 20)
+            let randomXRange = originalPosition.rangeX || (Math.random() * this.particleSpeedFactor * 2 + this.particleSpeedFactor)
+            let randomYRange = originalPosition.rangeY || (Math.random() * this.particleSpeedFactor * 2 + this.particleSpeedFactor)
 
             originalPosition.speedX = randomXSpeed
             originalPosition.speedY = randomYSpeed
