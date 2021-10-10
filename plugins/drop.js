@@ -1,4 +1,3 @@
-import Vue from 'vue'
 import Drop from '~/utils/drop'
 
 const drop = new Drop({
