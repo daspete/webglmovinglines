@@ -4,10 +4,13 @@ import Drop from '~/utils/drop'
 const drop = new Drop({
     lineColor: 0xff0000,
     pointColor: 0xff0000,
+    particleColor: 0xff0000,
     pointSize: 0.05,
-    lineMaxDistance: 2.5,
-    particleSize: 0.3,
+    lineMaxDistance: 3.7,//2.5,
+    particleSize: 0.2,
     particleTexture: '/assets/particle.png',
+    particleRotationSpeed: 0.016,
+    particleRadiusExpansion: 0.9,
     pointDefinitions: [
         { count: 1, y: 10, radius: 0 },
         { count: 2, y: 9, radius: 0.8 },

@@ -5,44 +5,35 @@ import {
     Clock,
     Vector3,
     Color,
-    LinearFilter,
     SphereGeometry,
     BufferGeometry,
-    Geometry,
     BufferAttribute,
     MeshBasicMaterial,
-    LineBasicMaterial,
+    ShaderMaterial,
     ParticleBasicMaterial,
     ParticleSystem,
     Mesh,
     Float32BufferAttribute,
-    VertexColors,
     AdditiveBlending,
-    NormalBlending,
-    MultiplyBlending,
-    NoBlending,
     LineSegments,
     DynamicDrawUsage,
-    WebGLRenderTarget,
     ImageUtils,
 } from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
-import { SavePass } from 'three/examples/jsm/postprocessing/SavePass.js'
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'
-import { BlendShader } from 'three/examples/jsm/shaders/BlendShader.js'
-
+import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js'
 
 export default class Drop {
     constructor(options){
         this.$container = null
         this.$canvas = null
-        this.pointColor = new Color(options.pointColor)
         this.pointSize = options.pointSize
+        this.pointColor = new Color(options.pointColor)
+        this.pointDefinitions = options.pointDefinitions
         this.particleSize = options.particleSize
         this.particleTexture = options.particleTexture
-        this.pointDefinitions = options.pointDefinitions
+        this.particleRotationSpeed = options.particleRotationSpeed
+        this.particleRadiusExpansion = options.particleRadiusExpansion
         this.lineColor = new Color(options.lineColor)
         this.lineMaxDistance = options.lineMaxDistance
         this.linePositions = null
@@ -90,25 +81,26 @@ export default class Drop {
         this.renderer.setSize(this.width, this.height)
 
         // Postprocessing pipeline
-        // this.composer = new EffectComposer(this.renderer)
-        
-        // let renderPass = new RenderPass(this.scene, this.camera)
-        
-        // let savePass = new SavePass(new WebGLRenderTarget(this.width, this.height, {
-        //     minFilter: LinearFilter,
-        //     magFilter: LinearFilter,
-        //     stencilBuffer: false
-        // }))
-        
-        // let blendPass = new ShaderPass(BlendShader, 'tDiffuse1')
-        // blendPass.uniforms['tDiffuse2'].value = savePass.renderTarget.texture
-        // blendPass.uniforms['mixRatio'].value = 0.8
-        // let outputPass = new ShaderPass(CopyShader)
-        // outputPass.renderToScreen = true
-        // this.composer.addPass(renderPass)
-        // this.composer.addPass(savePass)
-        // this.composer.addPass(blendPass)
-        // this.composer.addPass(outputPass)
+        this.composer = new EffectComposer(this.renderer)
+        this.composer.addPass(new RenderPass(this.scene, this.camera))
+        this.composer.addPass(new AfterimagePass(0.97))
+
+        window.addEventListener('resize', this.Resize.bind(this))
+        this.Resize()
+    }
+
+    Resize(){
+        this.width = this.$container.clientWidth
+        this.height = this.$container.clientHeight
+
+        this.$canvas.width = this.width
+        this.$canvas.height = this.height
+
+        this.camera.aspect = this.width / this.height
+        this.camera.updateProjectionMatrix()
+
+        this.renderer.setSize(this.width, this.height)
+        this.composer.setSize(this.width, this.height)
     }
 
     CreatePoints(){
@@ -136,8 +128,8 @@ export default class Drop {
     }
 
     CreatePointMesh(position){
-        const geometry = new SphereGeometry(this.pointSize, 8, 8)
-        const material = new MeshBasicMaterial({ color: this.pointColor })
+        const geometry = new SphereGeometry(this.pointSize, 6, 6)
+        const material = new MeshBasicMaterial({ color: this.pointColor, transparent: true })
         const sphere = new Mesh(geometry, material)
         
         sphere.position.set(position.x, position.y, position.z)
@@ -168,8 +160,8 @@ export default class Drop {
             for (let j = 0; j < pointCount; j++){
                 let angle = ((j + 1) / pointCount) * 360
 
-                let x = Math.sin(angle * Math.PI / 180) * pointDefinition.radius * 1.1
-                let z = Math.cos(angle * Math.PI / 180) * pointDefinition.radius * 1.1
+                let x = Math.sin(angle * Math.PI / 180) * pointDefinition.radius * this.particleRadiusExpansion
+                let z = Math.cos(angle * Math.PI / 180) * pointDefinition.radius * this.particleRadiusExpansion
 
                 this.particlePositions.push(new Vector3(x, pointDefinition.y, z))
                 particleVertices.push(x, pointDefinition.y, z)
@@ -177,8 +169,6 @@ export default class Drop {
         }
 
         this.particles.setAttribute('position', new Float32BufferAttribute(particleVertices, 3))
-        // this.particles.computeBoundingSphere()
-        // this.particles.setDrawRange(0, 0)
 
         this.particleSystem = new ParticleSystem(this.particles, particleMaterial)
         this.particleSystem.softParticles = true
@@ -188,21 +178,42 @@ export default class Drop {
 
     CreateNet(){
         this.linePositions = new Float32Array(this.points.length * this.points.length * 3)
-        this.lineColors = new Float32Array(this.points.length * this.points.length * 3)
+        this.lineColors = new Float32Array(this.points.length * this.points.length * 4)
 
         let lineGeometry = new BufferGeometry()
         lineGeometry.setAttribute('position', new BufferAttribute(this.linePositions, 3).setUsage(DynamicDrawUsage))
-        lineGeometry.setAttribute('color', new BufferAttribute(this.lineColors, 3).setUsage(DynamicDrawUsage))
+        lineGeometry.setAttribute('color', new BufferAttribute(this.lineColors, 4, true).setUsage(DynamicDrawUsage))
         lineGeometry.computeBoundingSphere()
         lineGeometry.setDrawRange(0, 0)
 
-        let lineMaterial = new MeshBasicMaterial({
-            color: this.lineColor,
-            vertexColors: VertexColors,
-            // linewidth: 1,
+        // created a shader material to enable alpha fading of the lines
+        let lineMaterial = new ShaderMaterial({
+            vertexShader: `
+                precision mediump float;
+                precision mediump int;
+            
+                attribute vec4 color;
+                varying vec4 vColor;
+            
+                void main(){
+                    vColor = color;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                }
+            `,
+            fragmentShader: `
+                precision mediump float;
+                precision mediump int;
+            
+                varying vec4 vColor;
+            
+                void main(){
+                    vec4 color = vec4( vColor );
+                    gl_FragColor = color;
+                }
+            `,
             blending: AdditiveBlending,
             transparent: true,
-            opacity: 0.5,
+            depthTest: false
         })
 
         this.lineMesh = new LineSegments(lineGeometry, lineMaterial)
@@ -215,9 +226,11 @@ export default class Drop {
         this.UpdateNet()
         this.UpdateParticles()
 
-        // this.composer.render(this.clock.getDelta())
+        // disable this to disable post processing
+        this.composer.render(this.clock.getDelta())
 
-        this.renderer.render(this.scene, this.camera)
+        // enable this to disable post processing
+        // this.renderer.render(this.scene, this.camera)
     }
 
     UpdateNet(){
@@ -229,10 +242,7 @@ export default class Drop {
             let point = this.points[i]
             if(point.r > 0) this.UpdatePoint(point, i)
 
-            for(let j = i; j < this.points.length; j++){
-                // hacky one :D 
-                if(j == i) continue
-
+            for(let j = i + 1; j < this.points.length; j++){
                 let otherPoint = this.points[j]
 
                 const dx = point.position.x - otherPoint.position.x
@@ -240,29 +250,30 @@ export default class Drop {
                 const dz = point.position.z - otherPoint.position.z
                 
                 let distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
+                let alpha = otherPoint.position.z  / 3
+                let distanceAlpha = 1.1 - (distance / this.lineMaxDistance)
 
-                if(distance < this.lineMaxDistance){
-                    // let distanceRatio = distance / this.lineMaxDistance
-                    let alpha = otherPoint.position.z  / 3 + 1
-
-                    let lineColor = new Color(alpha, 0, 0)//(0xff0000)//.lerp(new THREE.Color(0x000000), alpha)
-
-                    this.linePositions[vertexPos++] = point.position.x
-                    this.linePositions[vertexPos++] = point.position.y
-                    this.linePositions[vertexPos++] = point.position.z
-                    this.linePositions[vertexPos++] = otherPoint.position.x
-                    this.linePositions[vertexPos++] = otherPoint.position.y
-                    this.linePositions[vertexPos++] = otherPoint.position.z
-
-                    this.lineColors[colorPos++] = lineColor.r
-                    this.lineColors[colorPos++] = lineColor.g
-                    this.lineColors[colorPos++] = lineColor.b
-                    this.lineColors[colorPos++] = lineColor.r
-                    this.lineColors[colorPos++] = lineColor.g
-                    this.lineColors[colorPos++] = lineColor.b
-
-                    numConnected++
+                if(distanceAlpha < alpha){
+                    alpha = distanceAlpha
                 }
+
+                this.linePositions[vertexPos++] = point.position.x
+                this.linePositions[vertexPos++] = point.position.y
+                this.linePositions[vertexPos++] = point.position.z
+                this.linePositions[vertexPos++] = otherPoint.position.x
+                this.linePositions[vertexPos++] = otherPoint.position.y
+                this.linePositions[vertexPos++] = otherPoint.position.z
+
+                this.lineColors[colorPos++] = this.lineColor.r
+                this.lineColors[colorPos++] = this.lineColor.g
+                this.lineColors[colorPos++] = this.lineColor.b
+                this.lineColors[colorPos++] = alpha
+                this.lineColors[colorPos++] = this.lineColor.r
+                this.lineColors[colorPos++] = this.lineColor.g
+                this.lineColors[colorPos++] = this.lineColor.b
+                this.lineColors[colorPos++] = alpha
+
+                numConnected++
             }
         }
 
@@ -281,7 +292,7 @@ export default class Drop {
 
         let alpha = point.position.z / 3 + 1
 
-        point.material.color = new Color(alpha, 0, 0)
+        point.material.opacity = alpha
     }
 
     UpdateParticles(){
@@ -292,26 +303,31 @@ export default class Drop {
 
             let x = this.particles.attributes.position.array[i]
             let y = this.particles.attributes.position.array[i + 1]
-            // let z = this.particles.attributes.position.array[i + 2]
 
-            let randomXSpeed = originalPosition.speedX || (Math.random() * 0.1 + 0.1)
-            let randomYSpeed = originalPosition.speedY || (Math.random() * 0.1 + 0.1)
+            let speedRange = 0.2
+
+            let randomXSpeed = originalPosition.speedX || (Math.random() * speedRange + speedRange)
+            let randomYSpeed = originalPosition.speedY || (Math.random() * speedRange + speedRange)
+
+            let randomXRange = originalPosition.rangeX || (Math.random() * 40 + 20)
+            let randomYRange = originalPosition.rangeY || (Math.random() * 40 + 20)
 
             originalPosition.speedX = randomXSpeed
             originalPosition.speedY = randomYSpeed
-
-            x = originalPosition.x + Math.sin(this.clock.getElapsedTime() * Math.PI / 180 * 40) * randomXSpeed * (counter % 2 == 0 ? 1 : -1)
-            y = originalPosition.y + Math.cos(this.clock.getElapsedTime() * Math.PI / 180 * 40) * randomYSpeed * (counter % 2 == 0 ? 1 : -1)
+            originalPosition.rangeX = randomXRange
+            originalPosition.rangeY = randomYRange
+            
+            x = originalPosition.x - Math.abs(Math.sin(this.clock.getElapsedTime() * Math.PI / 180 * randomXRange) * randomXSpeed * (counter % 2 == 0 ? 1 : -1))
+            y = originalPosition.y + Math.cos(this.clock.getElapsedTime() * Math.PI / 180 * randomYRange) * randomYSpeed * (counter % 2 == 0 ? 1 : -1)
             
             this.particles.attributes.position.array[i] = x
             this.particles.attributes.position.array[i + 1] = y
-
+            
             counter++
-
         }
 
         this.particles.attributes.position.needsUpdate = true
 
-        this.particleSystem.rotation.y -= 0.001
+        this.particleSystem.rotation.y -= 0.016
     }
 }
