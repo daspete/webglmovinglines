@@ -6,6 +6,7 @@ import {
     Vector3,
     Color,
     SphereGeometry,
+    CircleGeometry,
     BufferGeometry,
     BufferAttribute,
     MeshBasicMaterial,
@@ -30,6 +31,8 @@ export default class Drop {
         this.pointSize = options.pointSize
         this.pointColor = new Color(options.pointColor)
         this.pointDefinitions = options.pointDefinitions
+        this.netRotationSpeedFactor = options.netRotationSpeedFactor
+        this.netRotationSpeedVariance = options.netRotationSpeedVariance
         this.particleSize = options.particleSize
         this.particleTexture = options.particleTexture
         this.particleRotationSpeed = options.particleRotationSpeed
@@ -37,6 +40,7 @@ export default class Drop {
         this.particleSpeedVariance = options.particleSpeedVariance
         this.particleSpeedFactor = options.particleSpeedFactor
         this.particleColor = new Color(options.particleColor)
+        this.motionBlurEffect = options.motionBlurEffect
         this.lineColor = new Color(options.lineColor)
         this.lineMaxDistance = options.lineMaxDistance
         this.linePositions = null
@@ -86,7 +90,7 @@ export default class Drop {
         // Postprocessing pipeline
         this.composer = new EffectComposer(this.renderer)
         this.composer.addPass(new RenderPass(this.scene, this.camera))
-        this.composer.addPass(new AfterimagePass(0.97))
+        this.composer.addPass(new AfterimagePass(this.motionBlurEffect))
 
         window.addEventListener('resize', this.Resize.bind(this))
         this.Resize()
@@ -131,10 +135,16 @@ export default class Drop {
     }
 
     CreatePointMesh(position){
-        const geometry = new SphereGeometry(this.pointSize, 6, 6)
-        const material = new MeshBasicMaterial({ color: this.pointColor, transparent: true })
+        const geometry = new CircleGeometry(this.pointSize, 6)
+        const material = new ParticleBasicMaterial({
+            color: this.particleColor,
+            size: this.particleSize,
+            map: ImageUtils.loadTexture(this.particleTexture),
+            blending: AdditiveBlending,
+            transparent: true,
+            depthWrite: false,
+        })
         const sphere = new Mesh(geometry, material)
-        
         sphere.position.set(position.x, position.y, position.z)
         
         return sphere
@@ -291,7 +301,7 @@ export default class Drop {
         angle += 0.00025 * point.r * point.position.y * 0.5
         point.position.x = Math.cos(angle) * distance
         point.position.z = Math.sin(angle) * distance
-        point.position.y = point.originalY + Math.sin(this.clock.getElapsedTime() * Math.PI / 180 * 40) * 0.2 * (pointIndex % 2 == 0 ? 1 : -1)
+        point.position.y = point.originalY + Math.sin(this.clock.getElapsedTime() * Math.PI / 180 * this.netRotationSpeedFactor) * this.netRotationSpeedVariance * (pointIndex % 2 == 0 ? 1 : -1)
 
         let alpha = point.position.z / 3 + 1
 
@@ -306,8 +316,6 @@ export default class Drop {
 
             let x = this.particles.attributes.position.array[i]
             let y = this.particles.attributes.position.array[i + 1]
-
-            let speedRange = 0.3
 
             let randomXSpeed = originalPosition.speedX || (Math.random() * this.particleSpeedVariance + this.particleSpeedVariance)
             let randomYSpeed = originalPosition.speedY || (Math.random() * this.particleSpeedVariance + this.particleSpeedVariance)
@@ -331,6 +339,6 @@ export default class Drop {
 
         this.particles.attributes.position.needsUpdate = true
 
-        this.particleSystem.rotation.y -= 0.016
+        this.particleSystem.rotation.y -= this.particleRotationSpeed
     }
 }
